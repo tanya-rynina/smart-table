@@ -1,9 +1,10 @@
 import { makeIndex } from "./lib/utils.js";
+import { sortCollection } from "./lib/sort.js";
 
 const BASE_URL = '/sp7-api';
 
 export function initData(sourceData) {
- 
+   
     const localSellers = makeIndex(sourceData.sellers, 'id', v => `${v.first_name} ${v.last_name}`);
     const localCustomers = makeIndex(sourceData.customers, 'id', v => `${v.first_name} ${v.last_name}`);
     const localData = sourceData.purchase_records.map(item => ({
@@ -44,6 +45,69 @@ export function initData(sourceData) {
         return { sellers, customers };
     };
 
+   
+    const isEmpty = (value) => value === undefined || value === null || value === '';
+
+    const applyLocalSearch = (items, searchTerm) => {
+        if (isEmpty(searchTerm)) return items;
+        const term = String(searchTerm).toLowerCase();
+        return items.filter(item =>
+            ['date', 'customer', 'seller'].some(field => {
+                const val = item[field];
+                return typeof val === 'string' && val.toLowerCase().includes(term);
+            })
+        );
+    };
+
+    const applyLocalFilters = (items, query) => {
+        let filtered = [...items];
+
+        
+        Object.keys(query).forEach(key => {
+            const match = key.match(/^filter\[(.+)\]$/);
+            if (!match) return;
+            const field = match[1];
+            const value = query[key];
+            if (isEmpty(value)) return;
+
+            switch (field) {
+                case 'date':
+                case 'customer':
+                case 'seller':
+                    filtered = filtered.filter(item => {
+                        const itemVal = item[field];
+                        return typeof itemVal === 'string' && itemVal.toLowerCase().includes(String(value).toLowerCase());
+                    });
+                    break;
+                case 'totalFrom':
+                    filtered = filtered.filter(item => item.total >= Number(value));
+                    break;
+                case 'totalTo':
+                    filtered = filtered.filter(item => item.total <= Number(value));
+                    break;
+                
+            }
+        });
+
+        return filtered;
+    };
+
+    const applyLocalSort = (items, sortStr) => {
+        if (!sortStr) return items;
+        const [field, order] = sortStr.split(':');
+        if (!field || !order) return items;
+        return sortCollection(items, field, order);
+    };
+
+    const applyLocalPagination = (items, query) => {
+        const page = parseInt(query.page) || 1;
+        const limit = parseInt(query.limit) || 10;
+        const total = items.length;
+        const start = (page - 1) * limit;
+        const pagedItems = items.slice(start, start + limit);
+        return { total, items: pagedItems };
+    };
+
     const getRecords = async (query, isUpdated = false) => {
         const qs = new URLSearchParams(query);
         const nextQuery = qs.toString();
@@ -62,10 +126,25 @@ export function initData(sourceData) {
                 items: mapRecords(records.items)
             };
         } catch (e) {
-            console.warn('Failed to fetch records, using local data', e);
+            console.warn('Failed to fetch records, using local data with query', e);
+          
+            let items = [...localData];
+
+            
+            items = applyLocalSearch(items, query.search);
+
+           
+            items = applyLocalFilters(items, query);
+
+            
+            items = applyLocalSort(items, query.sort);
+
+            // Пагинация
+            const paginated = applyLocalPagination(items, query);
+
             lastResult = {
-                total: localData.length,
-                items: localData
+                total: paginated.total,
+                items: paginated.items
             };
         }
 
