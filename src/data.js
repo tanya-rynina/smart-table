@@ -45,7 +45,6 @@ export function initData(sourceData) {
         return { sellers, customers };
     };
 
-   
     const isEmpty = (value) => value === undefined || value === null || value === '';
 
     const applyLocalSearch = (items, searchTerm) => {
@@ -59,36 +58,27 @@ export function initData(sourceData) {
         );
     };
 
-    const applyLocalFilters = (items, query) => {
+    const applyLocalFilters = (items, filterObj) => {
         let filtered = [...items];
-
-        
-        Object.keys(query).forEach(key => {
-            const match = key.match(/^filter\[(.+)\]$/);
-            if (!match) return;
-            const field = match[1];
-            const value = query[key];
-            if (isEmpty(value)) return;
-
-            switch (field) {
-                case 'date':
-                case 'customer':
-                case 'seller':
-                    filtered = filtered.filter(item => {
-                        const itemVal = item[field];
-                        return typeof itemVal === 'string' && itemVal.toLowerCase().includes(String(value).toLowerCase());
-                    });
-                    break;
-                case 'totalFrom':
-                    filtered = filtered.filter(item => item.total >= Number(value));
-                    break;
-                case 'totalTo':
-                    filtered = filtered.filter(item => item.total <= Number(value));
-                    break;
-                
-            }
-        });
-
+        if (filterObj.date) {
+            const v = String(filterObj.date).toLowerCase();
+            filtered = filtered.filter(item => item.date.toLowerCase().includes(v));
+        }
+        if (filterObj.customer) {
+            const v = String(filterObj.customer).toLowerCase();
+            filtered = filtered.filter(item => item.customer.toLowerCase().includes(v));
+        }
+        if (filterObj.seller) {
+            filtered = filtered.filter(item => item.seller === filterObj.seller);
+        }
+        if (filterObj.totalFrom) {
+            const from = Number(filterObj.totalFrom);
+            if (!isNaN(from)) filtered = filtered.filter(item => item.total >= from);
+        }
+        if (filterObj.totalTo) {
+            const to = Number(filterObj.totalTo);
+            if (!isNaN(to)) filtered = filtered.filter(item => item.total <= to);
+        }
         return filtered;
     };
 
@@ -99,9 +89,7 @@ export function initData(sourceData) {
         return sortCollection(items, field, order);
     };
 
-    const applyLocalPagination = (items, query) => {
-        const page = parseInt(query.page) || 1;
-        const limit = parseInt(query.limit) || 10;
+    const applyLocalPagination = (items, page, limit) => {
         const total = items.length;
         const start = (page - 1) * limit;
         const pagedItems = items.slice(start, start + limit);
@@ -126,21 +114,26 @@ export function initData(sourceData) {
                 items: mapRecords(records.items)
             };
         } catch (e) {
-            console.warn('Failed to fetch records, using local data with query', e);
-          
-            let items = [...localData];
-
-            
-            items = applyLocalSearch(items, query.search);
-
+            console.warn('Failed to fetch records, using local data', e);
            
-            items = applyLocalFilters(items, query);
+            const search = query.search;
+            const sort = query.sort;
+            const page = parseInt(query.page) || 1;
+            const limit = parseInt(query.limit) || 10;
+            // Собираем объект фильтра из ключей filter[...]
+            const filter = {};
+            Object.keys(query).forEach(key => {
+                const match = key.match(/^filter\[(.+)\]$/);
+                if (match) {
+                    filter[match[1]] = query[key];
+                }
+            });
 
-            
-            items = applyLocalSort(items, query.sort);
-
-            // Пагинация
-            const paginated = applyLocalPagination(items, query);
+            let items = [...localData];
+            items = applyLocalSearch(items, search);
+            items = applyLocalFilters(items, filter);
+            items = applyLocalSort(items, sort);
+            const paginated = applyLocalPagination(items, page, limit);
 
             lastResult = {
                 total: paginated.total,
