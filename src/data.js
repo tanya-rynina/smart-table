@@ -1,13 +1,13 @@
-const BASE_URL = 'https://webinars.webdev.education-services.ru/sp7-api';
+const BASE_URL = '/sp7-api';
 
 export function initData(sourceData) {
-    // переменные для кеширования данных
+   
     let sellers;
     let customers;
     let lastResult;
     let lastQuery;
 
-    
+   
     const mapRecords = (data) => data.map(item => ({
         id: item.receipt_id,
         date: item.date,
@@ -16,7 +16,7 @@ export function initData(sourceData) {
         total: item.total_amount
     }));
 
-   
+    
     const getIndexes = async () => {
         if (!sellers || !customers) {
             [sellers, customers] = await Promise.all([
@@ -27,6 +27,7 @@ export function initData(sourceData) {
         return { sellers, customers };
     };
 
+ 
     const getRecords = async (query, isUpdated = false) => {
         const qs = new URLSearchParams(query);
         const nextQuery = qs.toString();
